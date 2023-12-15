@@ -17,7 +17,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 import os
 
-os.chdir(os.path.dirname(__file__))
+# os.chdir(os.path.dirname(__file__))
 
 '''模型及损失函数定义'''
 '模型结构'
@@ -57,8 +57,8 @@ input_size= output_size = 28*28 #原始图片和生成图片的维度
 
 '训练参数'
 epochs = 20 #训练时期
-batch_size = 32 #每步训练样本数
-learning_rate = 1e-5 #学习率
+batch_size = 64 #每步训练样本数
+learning_rate = 1e-3 #学习率
 device =torch.device('cuda' if torch.cuda.is_available() else 'cpu')#训练设备
 
 '构建模型' #如之前训练过，会导入本地已训练的模型文件
@@ -69,12 +69,12 @@ model_d = Discriminator(input_size, hidden_size).to(device)
 optim_g = torch.optim.Adam(model_g.parameters(), lr=learning_rate)
 optim_d = torch.optim.Adam(model_d.parameters(), lr=learning_rate)
 
-try:#尝试导入本地已有模型
-    model_g.load_state_dict(torch.load(modelname[0]))
-    model_d.load_state_dict(torch.load(modelname[1]))
-    print('[INFO] Load Model complete')
-except:
-    pass
+# try:#尝试导入本地已有模型
+#     model_g.load_state_dict(torch.load(modelname[0]))
+#     model_d.load_state_dict(torch.load(modelname[1]))
+#     print('[INFO] Load Model complete')
+# except:
+#     pass
 
 
 
@@ -102,21 +102,13 @@ for epoch in range(epochs):   #每轮
         T_lbl = torch.ones(bs,1).to(device) #bs,1
         F_lbl = torch.zeros(bs,1).to(device) #bs,1
 
-        ###训练生成器
+        
+        optim_d.zero_grad()
+        optim_g.zero_grad()
+        #生成伪造数据
         #生成高斯噪声作为输入
         sample = torch.randn(bs,latent_size).to(device) #bs, latent_size
-        #生成伪造数据
         F_imgs = model_g(sample) #bs,output_size(28*28)
-        #使用判别器识别伪造数据输出判别结果
-        F_Dis = model_d(F_imgs) #bs,1
-
-        #计算损失，生成器的目标是让判别器对伪造数据的判别结果尽可能为1（真实）
-        loss_g = loss_BCE(F_Dis, T_lbl) 
-        #反向传播、参数优化，重置梯度
-        loss_g.backward()    
-        optim_g.step()
-        optim_g.zero_grad()
-
         ###训练判别器
         #使用判别器分别判断真实图像和伪造图像
         T_Dis = model_d(T_imgs) #bs,1
@@ -129,7 +121,16 @@ for epoch in range(epochs):   #每轮
         #反向传播、参数优化，重置梯度
         loss_d.backward()
         optim_d.step()
-        optim_d.zero_grad()
+        
+        ###训练生成器
+        #使用判别器识别伪造数据输出判别结果
+        F_Dis = model_d(F_imgs) #bs,1
+
+        #计算损失，生成器的目标是让判别器对伪造数据的判别结果尽可能为1（真实）
+        loss_g = loss_BCE(F_Dis, T_lbl) 
+        #反向传播、参数优化，重置梯度
+        loss_g.backward()    
+        optim_g.step()
 
         #记录总损失
         Gen_loss += loss_g.item()
@@ -194,16 +195,16 @@ sample = torch.randn(1,latent_size).to(device)#1,latent_size
 gen_imgs = model_g(sample) #1,output_size(28*28)
 gen_imgs = gen_imgs[0].view(28,28) #28,28
 plt.matshow(gen_imgs.cpu().detach().numpy())
-plt.show()
+plt.savefig('output.png')
 
 ###使用判别器
 #对数据集
-dataset = datasets.MNIST('/data', train=False, transform=transforms.ToTensor())
+dataset = datasets.MNIST('./data', train=False, transform=transforms.ToTensor())
 #取一组数据，index为数据序数
 index=0
 raw = dataset[index][0].view(28,28) #raw: bs,28,28->bs,28*28
 plt.matshow(raw.cpu().detach().numpy())
-plt.show()
+# plt.savefig('output.png')
 raw = raw.view(1,28*28)
 result = model_d(raw.to(device))
 print('该图为真概率为：',result.cpu().detach().numpy())
